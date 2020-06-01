@@ -454,9 +454,7 @@ static bool assign_distribution(processorid_t* id_array,
       board = 0;
     }
   }
-  if (available_id != NULL) {
-    FREE_C_HEAP_ARRAY(bool, available_id);
-  }
+  FREE_C_HEAP_ARRAY(bool, available_id);
   return true;
 }
 
@@ -493,9 +491,7 @@ bool os::distribute_processes(uint length, uint* distribution) {
       result = false;
     }
   }
-  if (id_array != NULL) {
-    FREE_C_HEAP_ARRAY(processorid_t, id_array);
-  }
+  FREE_C_HEAP_ARRAY(processorid_t, id_array);
   return result;
 }
 
@@ -4402,7 +4398,7 @@ bool os::pd_unmap_memory(char* addr, size_t bytes) {
 void os::pause() {
   char filename[MAX_PATH];
   if (PauseAtStartupFile && PauseAtStartupFile[0]) {
-    jio_snprintf(filename, MAX_PATH, PauseAtStartupFile);
+    jio_snprintf(filename, MAX_PATH, "%s", PauseAtStartupFile);
   } else {
     jio_snprintf(filename, MAX_PATH, "./vm.paused.%d", current_process_id());
   }
