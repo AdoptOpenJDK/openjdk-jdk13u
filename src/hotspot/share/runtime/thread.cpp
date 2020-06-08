@@ -904,7 +904,9 @@ bool Thread::claim_par_threads_do(uintx claim_token) {
 }
 
 void Thread::oops_do(OopClosure* f, CodeBlobClosure* cf) {
-  active_handles()->oops_do(f);
+  if (active_handles() != NULL) {
+    active_handles()->oops_do(f);
+  }
   // Do oop for ThreadShadow
   f->do_oop((oop*)&_pending_exception);
   handle_area()->oops_do(f);
@@ -1062,7 +1064,7 @@ bool Thread::is_in_stack(address adr) const {
   address end = os::current_stack_pointer();
   // Allow non Java threads to call this without stack_base
   if (_stack_base == NULL) return true;
-  if (stack_base() >= adr && adr >= end) return true;
+  if (stack_base() > adr && adr >= end) return true;
 
   return false;
 }
