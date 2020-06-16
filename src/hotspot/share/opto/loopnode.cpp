@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1998, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -2089,10 +2089,18 @@ bool IdealLoopTree::beautify_loops( PhaseIdealLoop *phase ) {
   // If I am a shared header (multiple backedges), peel off the many
   // backedges into a private merge point and use the merge point as
   // the one true backedge.
-  if (_head->req() > 3 && !_irreducible) {
+  if (_head->req() > 3) {
     // Merge the many backedges into a single backedge but leave
     // the hottest backedge as separate edge for the following peel.
-    merge_many_backedges( phase );
+    if (!_irreducible) {
+      merge_many_backedges( phase );
+    }
+
+    // When recursively beautify my children, split_fall_in can change
+    // loop tree structure when I am an irreducible loop. Then the head
+    // of my children has a req() not bigger than 3. Here we need to set
+    // result to true to catch that case in order to tell the caller to
+    // rebuild loop tree. See issue JDK-8244407 for details.
     result = true;
   }
 
@@ -2511,17 +2519,17 @@ void IdealLoopTree::dump_head() const {
     tty->print(" limit_check");
     entry = PhaseIdealLoop::skip_loop_predicates(entry);
   }
-  if (UseLoopPredicate) {
-    entry = PhaseIdealLoop::find_predicate_insertion_point(entry, Deoptimization::Reason_predicate);
-    if (entry != NULL) {
-      tty->print(" predicated");
+  if (UseProfiledLoopPredicate) {
+    predicate = PhaseIdealLoop::find_predicate_insertion_point(entry, Deoptimization::Reason_profile_predicate);
+    if (predicate != NULL) {
+      tty->print(" profile_predicated");
       entry = PhaseIdealLoop::skip_loop_predicates(entry);
     }
   }
-  if (UseProfiledLoopPredicate) {
-    entry = PhaseIdealLoop::find_predicate_insertion_point(entry, Deoptimization::Reason_profile_predicate);
-    if (entry != NULL) {
-      tty->print(" profile_predicated");
+  if (UseLoopPredicate) {
+    predicate = PhaseIdealLoop::find_predicate_insertion_point(entry, Deoptimization::Reason_predicate);
+    if (predicate != NULL) {
+      tty->print(" predicated");
     }
   }
   if (_head->is_CountedLoop()) {
@@ -2626,21 +2634,21 @@ void PhaseIdealLoop::collect_potentially_useful_predicates(
     LoopNode* lpn = loop->_head->as_Loop();
     Node* entry = lpn->in(LoopNode::EntryControl);
     Node* predicate_proj = find_predicate(entry); // loop_limit_check first
-    if (predicate_proj != NULL ) { // right pattern that can be used by loop predication
+    if (predicate_proj != NULL) { // right pattern that can be used by loop predication
       assert(entry->in(0)->in(1)->in(1)->Opcode() == Op_Opaque1, "must be");
-      useful_predicates.push(entry->in(0)->in(1)->in(1)); // good one
-      entry = skip_loop_predicates(entry);
-    }
-    predicate_proj = find_predicate(entry); // Predicate
-    if (predicate_proj != NULL ) {
       useful_predicates.push(entry->in(0)->in(1)->in(1)); // good one
       entry = skip_loop_predicates(entry);
     }
     if (UseProfiledLoopPredicate) {
       predicate_proj = find_predicate(entry); // Predicate
-      if (predicate_proj != NULL ) {
+      if (predicate_proj != NULL) {
         useful_predicates.push(entry->in(0)->in(1)->in(1)); // good one
+        entry = skip_loop_predicates(entry);
       }
+    }
+    predicate_proj = find_predicate(entry); // Predicate
+    if (predicate_proj != NULL) {
+      useful_predicates.push(entry->in(0)->in(1)->in(1)); // good one
     }
   }
 
@@ -3643,7 +3651,7 @@ int PhaseIdealLoop::build_loop_tree_impl( Node *n, int pre_order ) {
           Node *frame = new ParmNode( C->start(), TypeFunc::FramePtr );
           _igvn.register_new_node_with_optimizer(frame);
           // Halt & Catch Fire
-          Node *halt = new HaltNode( if_f, frame );
+          Node* halt = new HaltNode(if_f, frame, "never-taken loop exit reached");
           _igvn.register_new_node_with_optimizer(halt);
           set_loop(halt, l);
           C->root()->add_req(halt);

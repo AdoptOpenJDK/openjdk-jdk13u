@@ -10867,14 +10867,6 @@ instruct castII(iRegIdst dst) %{
   ins_pipe(pipe_class_default);
 %}
 
-instruct castLL(iRegLdst dst) %{
-  match(Set dst (CastLL dst));
-  format %{ " -- \t// castLL of $dst" %}
-  size(0);
-  ins_encode( /*empty*/ );
-  ins_pipe(pipe_class_default);
-%}
-
 instruct checkCastPP(iRegPdst dst) %{
   match(Set dst (CheckCastPP dst));
   format %{ " -- \t// checkcastPP of $dst" %}
@@ -15043,10 +15035,11 @@ instruct ShouldNotReachHere() %{
   ins_cost(CALL_COST);
 
   format %{ "ShouldNotReachHere" %}
-  size(4);
   ins_encode %{
-    // TODO: PPC port $archOpcode(ppc64Opcode_tdi);
-    __ trap_should_not_reach_here();
+    if (is_reachable()) {
+      // TODO: PPC port $archOpcode(ppc64Opcode_tdi);
+      __ trap_should_not_reach_here();
+    }
   %}
   ins_pipe(pipe_class_default);
 %}
